@@ -1,8 +1,8 @@
 ﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using GameAnalyticsSDK.Net;
@@ -69,7 +69,7 @@ namespace ChobbyLauncher
                         var selfUpdater = new SelfUpdater("Zero-K");
                         selfUpdater.ProgramUpdated += delegate
                         {
-                            Process.Start(Application.ExecutablePath, string.Join(" ", Environment.GetCommandLineArgs().Skip(1)));
+                            Process.Start(Process.GetCurrentProcess().StartInfo);
                             Environment.Exit(0);
                         };
                         var task = new Task<bool>(() => selfUpdater.CheckForUpdate());
