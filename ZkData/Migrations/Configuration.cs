@@ -42,7 +42,7 @@ namespace ZkData.Migrations
         protected override void Seed(ZkDataContext db) {
             db.Accounts.Where(a => a.Rank < 0).Update(x => new Account() { Rank = 0 });
 
-            db.Database.ExecuteSqlCommand($"truncate table {nameof(LogEntries)}");
+            //db.Database.ExecuteSqlCommand($"truncate table {nameof(LogEntries)}");
            
             if (GlobalConst.Mode == ModeType.Local) LocalSeed(db);
 
