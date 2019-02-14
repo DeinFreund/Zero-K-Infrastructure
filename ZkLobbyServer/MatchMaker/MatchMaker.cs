@@ -13,7 +13,7 @@ namespace ZkLobbyServer
 {
     public partial class MatchMaker
     {
-        private const int TimerSeconds = 20;
+        private const int TimerSeconds = 25;
         private const int MapModChangePauseSeconds = 30;
 
         private int BanSecondsIncrease => DynamicConfig.Instance.MmBanSecondsIncrease;
@@ -37,6 +37,7 @@ namespace ZkLobbyServer
             public int BanSeconds;
         }
 
+        private ConcurrentDictionary<string, DateTime> lastTimePlayerDeniedMatch = new ConcurrentDictionary<string, DateTime>(); //used to check if player can be annoyed with MM suggestions or if he's clearly desinterested
 
         private ConcurrentDictionary<string, BanInfo> bannedPlayers = new ConcurrentDictionary<string, BanInfo>();
         private Dictionary<string, int> ingameCounts = new Dictionary<string, int>();
@@ -157,6 +158,7 @@ namespace ZkLobbyServer
                     }
                     else
                     {
+                        lastTimePlayerDeniedMatch[entry.Name] = DateTime.UtcNow; //store that this player is probably not interested in suggestive MM games
                         entry.LastReadyResponse = false;
                         await RemoveUser(user.Name, true);
                     }
@@ -176,7 +178,7 @@ namespace ZkLobbyServer
 
                         var proposedBattles = ProposeBattles(invitedPeople.Where(x => x.LastReadyResponse), false);
 
-                        await Task.WhenAll(invitedPeople.Where(x => !x.QuickPlay).Select(async (p) =>
+                        await Task.WhenAll(invitedPeople.Select(async (p) =>
                         {
                             var invitedBattle = invitationBattles?.FirstOrDefault(x => x.Players.Contains(p));
                             await server.SendToUser(p.Name,
@@ -233,6 +235,8 @@ namespace ZkLobbyServer
                 return;
             }
 
+            DateTime player;
+            lastTimePlayerDeniedMatch.TryRemove(user.Name, out player); //this player might be interested in suggestive MM games after all
 
             var wantedQueueNames = cmd.Queues?.ToList() ?? new List<string>();
             var wantedQueues = PossibleQueues.Where(x => wantedQueueNames.Contains(x.Name)).ToList();
@@ -240,10 +244,18 @@ namespace ZkLobbyServer
             await AddOrUpdateUser(user, wantedQueues);
         }
 
+        public List<ConnectedUser> GetEligibleQuickJoinPlayers(List<ConnectedUser> users)
+        {
+            DateTime lastDenied;
+            return users.Where(x => !(lastTimePlayerDeniedMatch.TryGetValue(x.Name, out lastDenied) && DateTime.UtcNow.Subtract(lastDenied).TotalMinutes < DynamicConfig.Instance.MmMinimumMinutesBetweenSuggestions)).ToList(); 
+        }
+
         public async Task MassJoin(List<ConnectedUser> users, List<MatchMakerSetup.Queue> wantedQueues)
         {
+            //don't join people that are probably not interested
+            users = GetEligibleQuickJoinPlayers(users);
+
             for (int i = 0; i < users.Count; i++) {
-                bool alreadyJoined = players.ContainsKey(users[i].Name);
                 //join all users without running tick
                 await AddOrUpdateUser(users[i], wantedQueues, true); 
 
@@ -468,7 +480,7 @@ namespace ZkLobbyServer
                 if (toInvite.Contains(usr) || usr.QuickPlay) //invite all quickplay players, there will be lots of declines so don't care about making battles yet
                 {
                     usr.InvitedToPlay = true;
-                    usr.LastReadyResponse = usr.QuickPlay; //quickplay users just said they want to play
+                    usr.LastReadyResponse = false;
                 }
                 else
                 {
@@ -477,18 +489,20 @@ namespace ZkLobbyServer
                 }
 
             //send out invites to players in battles
-            //don't send out invites to QuickPlayers they just said they want to play
             server.Broadcast(toInvite.Where(p => !p.QuickPlay).Select(p => p.Name),
                 new AreYouReady() {
                     SecondsRemaining = TimerSeconds,
                     MinimumWinChance = -1,
                     QuickPlay = false
                 });
-            
-            if (invitationBattles.Count > 0 && toInvite.Count(p => !p.QuickPlay) == 0) //everyone is quickplay, don't wait
-            {
-                OnTick();
-            }
+            //send out invites to all QuickPlayers
+            server.Broadcast(players.Values.Where(x => x != null && x.QuickPlay).Select(x => x.Name),
+                new AreYouReady()
+                {
+                    SecondsRemaining = TimerSeconds,
+                    MinimumWinChance = DynamicConfig.Instance.MmTeamsMinimumWinChance,
+                    QuickPlay = true
+                });
         }
 
         private List<ProposedBattle> ResolveToRealBattles()
@@ -504,9 +518,9 @@ namespace ZkLobbyServer
             var readyAndStarting = readyUsers.Where(x => realBattles.Any(y => y.Players.Contains(x))).ToList();
             var readyAndFailed = readyUsers.Where(x => !realBattles.Any(y => y.Players.Contains(x))).ToList();
 
-            server.Broadcast(readyAndFailed.Where(x => !x.QuickPlay).Select(x => x.Name), new AreYouReadyResult() { IsBattleStarting = false });
+            server.Broadcast(readyAndFailed.Select(x => x.Name), new AreYouReadyResult() { IsBattleStarting = false });
 
-            server.Broadcast(readyAndStarting.Where(x => !x.QuickPlay).Select(x => x.Name), new AreYouReadyResult() { IsBattleStarting = true });
+            server.Broadcast(readyAndStarting.Select(x => x.Name), new AreYouReadyResult() { IsBattleStarting = true });
 
             foreach (var usr in readyAndStarting)
             {
@@ -587,7 +601,6 @@ namespace ZkLobbyServer
             {
                 PlayerEntry entry;
                 players.TryGetValue(name, out entry);
-                if (entry?.QuickPlay == true) entry = null; //don't confuse quickplay users with MM
                 var ret = new MatchMakerStatus()
                 {
                     QueueCounts = queuesCounts,

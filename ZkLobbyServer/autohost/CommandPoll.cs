@@ -11,12 +11,11 @@ namespace ZkLobbyServer
     {
         private int winCount;
         private ServerBattle battle;
+        private Dictionary<string, int> userVotes = new Dictionary<string, int>(); //stores votes, zero indexed
         private Func<string, string> EligiblitySelector; //return null if player is allowed to vote, otherwise reason
         private readonly bool absoluteMajorityVote; //if set to yes, at least N/2 players need to vote for an option to be selected. Otherwise the option with the majority of votes wins
         private bool yesNoVote; //if set to yes, there must be only two options being yes and no.
         private bool mapSelection; //if set to yes, options have an url and represent map resources
-
-        public Dictionary<string, int> UserVotes { get; private set; } = new Dictionary<string, int>(); //stores votes, zero indexed
 
         public bool Ended { get; private set; } = false;
         public string Topic { get; private set; }
@@ -45,7 +44,7 @@ namespace ZkLobbyServer
             if (winCount <= 0) winCount = 1;
 
             await battle.server.Broadcast(battle.Users.Keys, GetBattlePoll());
-            if (yesNoVote) await battle.SayBattle(string.Format("Poll: {0} [!y={1}/{3}, !n={2}/{3}]", Topic, UserVotes.Count(x => x.Value == 0), UserVotes.Count(x => x.Value == 1), winCount));
+            if (yesNoVote) await battle.SayBattle(string.Format("Poll: {0} [!y={1}/{3}, !n={2}/{3}]", Topic, userVotes.Count(x => x.Value == 0), userVotes.Count(x => x.Value == 1), winCount));
 
         }
 
@@ -57,7 +56,7 @@ namespace ZkLobbyServer
                 {
                     Id = i + 1,
                     Name = o.Name,
-                    Votes = UserVotes.Count(x => x.Value == i),
+                    Votes = userVotes.Count(x => x.Value == i),
                     URL = o.URL
                 }).ToList(),
                 Topic = Topic,
@@ -70,7 +69,7 @@ namespace ZkLobbyServer
         private async Task<bool> CheckEnd(bool timeout)
         {
 
-            List<int> votes = Options.Select((o, i) => UserVotes.Count(x => x.Value == i)).ToList();
+            List<int> votes = Options.Select((o, i) => userVotes.Count(x => x.Value == i)).ToList();
             var winnerId = votes.IndexOf(votes.Max());
 
             if (votes[winnerId] >= winCount || timeout && !absoluteMajorityVote)
@@ -137,9 +136,9 @@ namespace ZkLobbyServer
             if (ineligibilityReason == null && !Ended)
             {
 
-                UserVotes[e.User] = vote - 1;
+                userVotes[e.User] = vote - 1;
 
-                if (yesNoVote) await battle.SayBattle(string.Format("Poll: {0} [!y={1}/{3}, !n={2}/{3}]", Topic, UserVotes.Count(x => x.Value == 0), UserVotes.Count(x => x.Value == 1), winCount));
+                if (yesNoVote) await battle.SayBattle(string.Format("Poll: {0} [!y={1}/{3}, !n={2}/{3}]", Topic, userVotes.Count(x => x.Value == 0), userVotes.Count(x => x.Value == 1), winCount));
                 await battle.server.Broadcast(battle.Users.Keys, GetBattlePoll());
 
                 if (await CheckEnd(false)) return true;

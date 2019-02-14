@@ -24,8 +24,7 @@ namespace ZkLobbyServer
     public class ServerBattle : Battle
     {
         public const int PollTimeout = 60;
-        public const int DiscussionTime = 15;
-        public const int MMVoteTime = 15;
+        public const int DiscussionTime = 35;
         public const int MapVoteTime = 25;
         public const int NumberOfMapChoices = 4;
         public const int MinimumAutostartPlayers = 6;
@@ -865,6 +864,16 @@ namespace ZkLobbyServer
 
             toNotify.Clear();
 
+            var playingEligibleUsers = server.MatchMaker.GetEligibleQuickJoinPlayers(Users.Values.Where(x => !x.LobbyUser.IsAway && !x.IsSpectator).Select(x => server.ConnectedUsers[x.Name]).ToList());
+            if (playingEligibleUsers.Count() >= InviteMMPlayers) { //Make sure there are enough eligible users for a battle to be likely to happen
+
+                //put all users into MM queue to suggest battles
+                var teamsQueues = server.MatchMaker.PossibleQueues.Where(x => x.Mode == AutohostMode.Teams).ToList();
+                var availableUsers = Users.Values.Where(x => !x.LobbyUser.IsAway).Select(x => server.ConnectedUsers[x.Name]).ToList();
+                await server.MatchMaker.MassJoin(availableUsers, teamsQueues);
+            }
+
+
             if (IsAutohost)
             {
                 if (!string.IsNullOrEmpty(debriefingMessage.Message))
@@ -887,39 +896,6 @@ namespace ZkLobbyServer
         private void discussionTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
             discussionTimer.Stop();
-
-            if (Users.Values.Count(x => !x.IsSpectator) < InviteMMPlayers)
-            {
-                MMVoteEnded(this, null);
-                return;
-            }
-
-            var poll = new CommandPoll(this, true, false);
-            var options = new List<PollOption>();
-            Func<Task> endAction = async () =>
-            {
-                var teamsQueues = server.MatchMaker.PossibleQueues.Where(x => x.Mode == AutohostMode.Teams).ToList(); //teams queue
-                var users = poll.UserVotes.Where(x => x.Value == 0).Select(x => server.ConnectedUsers[x.Key]).ToList(); //everyone who voted yes
-                await server.MatchMaker.MassJoin(users, teamsQueues);
-            };
-            options.Add(new PollOption()
-            {
-                Name = "Yes",
-                Action = endAction
-            });
-            options.Add(new PollOption()
-            {
-                Name = "No",
-                Action = endAction
-            });
-            poll.PollEnded += MMVoteEnded;
-
-            //create poll where everyone can vote, even specs
-            StartVote((x) => null, options, null, "Do you want to play a small teams battle?", poll, MMVoteTime);
-        }
-
-        private void MMVoteEnded(object sender, PollOutcome e)
-        { 
             var poll = new CommandPoll(this, false, false, true);
             poll.PollEnded += MapVoteEnded;
             var options = new List<PollOption>();
