@@ -847,7 +847,7 @@ namespace ZkLobbyServer
             var debriefingMessage = BattleResultHandler.SubmitSpringBattleResult(springBattleContext, server);
             Debriefings.Add(debriefingMessage);
 
-            await server.Broadcast(Users.Keys, debriefingMessage);
+            await server.Broadcast(springBattleContext.ActualPlayers.Select(x => x.Name), debriefingMessage);
             await server.Broadcast(server.ConnectedUsers.Keys, new BattleUpdate() { Header = GetHeader() });
 
             foreach (var s in toNotify)
