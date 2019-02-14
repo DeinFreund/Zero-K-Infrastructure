@@ -837,16 +837,11 @@ namespace LobbyClient
             public string URL { get; set; } //Null if not applicable
         }
 
-        public enum PollType
-        {
-            YesNo = 0,
-            MapSelection = 1
-        }
-
         public string Topic { get; set; } //Null if there is no poll
         public List<PollOption> Options { get; set; } //Null if there is no poll
         public int VotesToWin { get; set; } //If any single option receives this many votes, it will win instantly. -1 if there is no poll
-        public PollType Type { get; set; } //What kind of vote is this (Yes/No, Map vote, ...)
+        public bool YesNoVote { get; set; } //Is this a vote with two options, yes and no
+        public bool MapSelection { get; set; } //Is this a vote with map options?
     }
 
     [Message(Origin.Server)]
@@ -854,6 +849,7 @@ namespace LobbyClient
     {
         public BattlePoll.PollOption WinningOption; //null if no winning option
         public string Topic; //topic of the previous poll
-        public BattlePoll.PollType Type; //type of the previous poll;
+        public bool YesNoVote { get; set; } //Was this a vote with two options, yes and no
+        public bool MapSelection { get; set; } //Was this a vote with map options?
     }
 }

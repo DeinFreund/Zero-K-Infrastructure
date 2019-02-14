@@ -533,9 +533,17 @@ namespace ZkLobbyServer
             Func<string, string> selector = cmd.GetIneligibilityReasonFunc(this);
             if (e != null && selector(e.User) != null) return false;
             var options = new List<PollOption>();
+
+            string url = null;
+            if (cmd is CmdMap)
+            {
+                url = $"{GlobalConst.BaseSiteUrl}/Maps/Detail/{(cmd as CmdMap).Map.ResourceID}";
+            }
+            poll = poll ?? new CommandPoll(this, true, true, cmd is CmdMap);
             options.Add(new PollOption()
             {
                 Name = "Yes",
+                URL = url,
                 Action = async () =>
                 {
                     if (cmd.Access == BattleCommand.AccessType.NotIngame && spring.IsRunning) return;
@@ -549,7 +557,7 @@ namespace ZkLobbyServer
                 Action = async () => { }
             });
 
-            if (await StartVote(selector, options, e, topic, new CommandPoll(this, BattlePoll.PollType.YesNo, true)))
+            if (await StartVote(selector, options, e, topic, poll))
             {
                 await RegisterVote(e, 1);
                 return true;
@@ -888,7 +896,7 @@ namespace ZkLobbyServer
         private void discussionTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
             discussionTimer.Stop();
-            var poll = new CommandPoll(this, BattlePoll.PollType.MapSelection, false);
+            var poll = new CommandPoll(this, false, false, true);
             poll.PollEnded += MapVoteEnded;
             var options = new List<PollOption>();
             for (int i = 0; i < NumberOfMapChoices; i++)

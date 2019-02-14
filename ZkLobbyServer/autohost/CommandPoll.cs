@@ -14,7 +14,8 @@ namespace ZkLobbyServer
         private Dictionary<string, int> userVotes = new Dictionary<string, int>(); //stores votes, zero indexed
         private Func<string, string> EligiblitySelector; //return null if player is allowed to vote, otherwise reason
         private readonly bool absoluteMajorityVote; //if set to yes, at least N/2 players need to vote for an option to be selected. Otherwise the option with the majority of votes wins
-        private PollType pollType; //if set to yes, there must be only two options being yes and no.
+        private bool yesNoVote; //if set to yes, there must be only two options being yes and no.
+        private bool mapSelection; //if set to yes, options have an url and represent map resources
 
         public bool Ended { get; private set; } = false;
         public string Topic { get; private set; }
@@ -24,11 +25,12 @@ namespace ZkLobbyServer
 
         public event EventHandler<PollOutcome> PollEnded = (sender, outcome) => { };
 
-        public CommandPoll(ServerBattle battle, PollType pollType, bool absoluteMajorityVote = true)
+        public CommandPoll(ServerBattle battle, bool yesNoVote, bool absoluteMajorityVote = true, bool mapSelection = false)
         {
             this.battle = battle;
             this.absoluteMajorityVote = absoluteMajorityVote;
-            this.pollType = pollType;
+            this.yesNoVote = yesNoVote;
+            this.mapSelection = mapSelection;
         }
 
         public async Task Setup(Func<string, string> eligibilitySelector, List<PollOption> options, Say creator, string Topic)
@@ -42,7 +44,7 @@ namespace ZkLobbyServer
             if (winCount <= 0) winCount = 1;
 
             await battle.server.Broadcast(battle.Users.Keys, GetBattlePoll());
-            if (pollType == PollType.YesNo) await battle.SayBattle(string.Format("Poll: {0} [!y={1}/{3}, !n={2}/{3}]", Topic, userVotes.Count(x => x.Value == 0), userVotes.Count(x => x.Value == 1), winCount));
+            if (yesNoVote) await battle.SayBattle(string.Format("Poll: {0} [!y={1}/{3}, !n={2}/{3}]", Topic, userVotes.Count(x => x.Value == 0), userVotes.Count(x => x.Value == 1), winCount));
 
         }
 
@@ -59,7 +61,8 @@ namespace ZkLobbyServer
                 }).ToList(),
                 Topic = Topic,
                 VotesToWin = winCount,
-                Type = pollType
+                YesNoVote = yesNoVote,
+                MapSelection = mapSelection
             };
         }
 
@@ -72,7 +75,7 @@ namespace ZkLobbyServer
             if (votes[winnerId] >= winCount || timeout && !absoluteMajorityVote)
             {
                 Ended = true;
-                if (pollType == PollType.YesNo)
+                if (yesNoVote)
                 {
                     if (winnerId == 0)
                     {
@@ -94,7 +97,7 @@ namespace ZkLobbyServer
             else if (timeout)
             {
                 Ended = true;
-                if (pollType == PollType.YesNo)
+                if (yesNoVote)
                 {
                     await battle.SayBattle($"Poll: {Topic} [END:FAILED]");
                 }
@@ -112,7 +115,8 @@ namespace ZkLobbyServer
         {
             await battle.server.Broadcast(battle.Users.Keys, new BattlePollOutcome {
                 Topic = Topic,
-                Type = pollType,
+                MapSelection = mapSelection,
+                YesNoVote = yesNoVote,
                 WinningOption = Outcome.ChosenOption != null ? GetBattlePoll().Options.First(x => x.Name == Outcome.ChosenOption.Name) : null
             });
             PollEnded(this, Outcome);
@@ -134,7 +138,7 @@ namespace ZkLobbyServer
 
                 userVotes[e.User] = vote - 1;
 
-                if (pollType == PollType.YesNo) await battle.SayBattle(string.Format("Poll: {0} [!y={1}/{3}, !n={2}/{3}]", Topic, userVotes.Count(x => x.Value == 0), userVotes.Count(x => x.Value == 1), winCount));
+                if (yesNoVote) await battle.SayBattle(string.Format("Poll: {0} [!y={1}/{3}, !n={2}/{3}]", Topic, userVotes.Count(x => x.Value == 0), userVotes.Count(x => x.Value == 1), winCount));
                 await battle.server.Broadcast(battle.Users.Keys, GetBattlePoll());
 
                 if (await CheckEnd(false)) return true;
