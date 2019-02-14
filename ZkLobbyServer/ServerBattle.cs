@@ -549,7 +549,7 @@ namespace ZkLobbyServer
                 Action = async () => { }
             });
 
-            if (await StartVote(selector, options, e, topic, poll: new CommandPoll(this, true, true)))
+            if (await StartVote(selector, options, e, topic, new CommandPoll(this, BattlePoll.PollType.YesNo, true)))
             {
                 await RegisterVote(e, 1);
                 return true;
@@ -557,14 +557,13 @@ namespace ZkLobbyServer
             return false;
         }
 
-        public async Task<bool> StartVote(Func<string, string> eligibilitySelector, List<PollOption> options, Say creator, string topic, int timeout = PollTimeout, CommandPoll poll = null)
+        public async Task<bool> StartVote(Func<string, string> eligibilitySelector, List<PollOption> options, Say creator, string topic, CommandPoll poll, int timeout = PollTimeout)
         {
             if (ActivePoll != null)
             {
                 await Respond(creator, $"Please wait, another poll already in progress: {ActivePoll.Topic}");
                 return false;
             }
-            if (poll == null) poll = new CommandPoll(this);
             await poll.Setup(eligibilitySelector, options, creator, topic);
             ActivePoll = poll;
             pollTimer.Interval = timeout * 1000;
@@ -580,7 +579,7 @@ namespace ZkLobbyServer
             if (ActivePoll != null) await ActivePoll.End();
             if (pollTimer != null) pollTimer.Enabled = false;
             ActivePoll = null;
-            oldPoll?.PublishResult();
+            await oldPoll?.PublishResult();
             await server.Broadcast(Users.Keys, new BattlePoll()
             {
                 Options = null,
@@ -889,7 +888,7 @@ namespace ZkLobbyServer
         private void discussionTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
             discussionTimer.Stop();
-            var poll = new CommandPoll(this, false, false);
+            var poll = new CommandPoll(this, BattlePoll.PollType.MapSelection, false);
             poll.PollEnded += MapVoteEnded;
             var options = new List<PollOption>();
             for (int i = 0; i < NumberOfMapChoices; i++)
@@ -906,6 +905,7 @@ namespace ZkLobbyServer
                 options.Add(new PollOption()
                 {
                     Name = map.InternalName,
+                    URL = $"{GlobalConst.BaseSiteUrl}/Maps/Detail/{map.ResourceID}",
                     Action = async () =>
                     {
                         var cmd = new CmdMap().Create();
@@ -916,7 +916,7 @@ namespace ZkLobbyServer
                     }
                 });
             }
-            StartVote(new CmdMap().GetIneligibilityReasonFunc(this), options, null, string.Format("(Yes) {0} (No) {1}?",options[0].Name, options[1].Name), MapVoteTime, poll);
+            StartVote(new CmdMap().GetIneligibilityReasonFunc(this), options, null, "Choose the next map", poll, MapVoteTime);
         }
 
         private void MapVoteEnded(object sender, PollOutcome e)
