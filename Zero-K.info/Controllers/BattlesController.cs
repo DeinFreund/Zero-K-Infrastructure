@@ -10,7 +10,7 @@ using ZkData;
 
 namespace ZeroKWeb.Controllers
 {
-    public class BattlesController: Controller
+    public class BattlesController : Controller
     {
         //
         // GET: /Battles/
@@ -18,7 +18,8 @@ namespace ZeroKWeb.Controllers
         /// <summary>
         ///     Returns the page of the <see cref="SpringBattle" /> with the specified ID
         /// </summary>
-        public ActionResult Detail(int id, bool showWinners = false) {
+        public ActionResult Detail(int id, bool showWinners = false)
+        {
             var db = new ZkDataContext();
             ViewBag.ShowWinners = showWinners;
             var bat = db.SpringBattles.FirstOrDefault(x => x.SpringBattleID == id);
@@ -47,7 +48,8 @@ namespace ZeroKWeb.Controllers
             public YesNoAny Bots { get; set; }
             public YesNoAny Victory { get; set; }
             public YesNoAny Matchmaker { get; set; }
-            public RatingOption Rating { get; set; }
+            public List<SelectListItem> RatingOptions { get; set; }
+            public int Rating { get; set; } = -1;
             public RankSelector Rank { get; set; } = RankSelector.Undefined;
             public int? offset { get; set; }
             public List<BattleQuickInfo> Data;
@@ -70,19 +72,11 @@ namespace ZeroKWeb.Controllers
             ThisMonth = 3
         }
 
-        public enum RatingOption
-        {
-            Any = 0,
-            Casual = 1,
-            Competitive = 2,
-            Planetwars = 3,
-            None = 4
-        }
-
         /// <summary>
         ///     Returns the main battle replay list; params filter
         /// </summary>
-        public ActionResult Index(BattleSearchModel model) {
+        public ActionResult Index(BattleSearchModel model)
+        {
             var db = new ZkDataContext();
 
             model = model ?? new BattleSearchModel();
@@ -94,7 +88,8 @@ namespace ZeroKWeb.Controllers
 
 
             //if (user == null && Global.IsAccountAuthorized) user = Global.Account.Name;
-            if (model.UserId != null) {
+            if (model.UserId != null)
+            {
                 int uniqueIds = model.UserId.Distinct().Count();
                 switch (model.Victory)
                 {
@@ -112,7 +107,7 @@ namespace ZeroKWeb.Controllers
 
             if (model.PlayersFrom.HasValue) q = q.Where(b => b.SpringBattlePlayers.Count(p => !p.IsSpectator) >= model.PlayersFrom);
             if (model.PlayersTo.HasValue) q = q.Where(b => b.SpringBattlePlayers.Count(p => !p.IsSpectator) <= model.PlayersTo);
-            
+
             if (model.Age != AgeOption.Any)
             {
                 var limit = DateTime.UtcNow;
@@ -155,27 +150,19 @@ namespace ZeroKWeb.Controllers
                 q = q.Where(b => b.IsMatchMaker == bval);
             }
 
-            if (model.Rating != RatingOption.Any)
-            {
-                switch (model.Rating)
-                {
-                    case RatingOption.Competitive:
-                        //q = q.Where(b => b.IsRatedMatch() && b.GetRatingCategory() == RatingCategory.MatchMaking);
-                        q = q.Where(b => b.ApplicableRatings.HasFlag(RatingCategoryFlags.MatchMaking));
-                        break;
-                    case RatingOption.Casual:
-                        //q = q.Where(b => b.IsRatedMatch() && b.GetRatingCategory() == RatingCategory.Casual);
-                        q = q.Where(b => b.ApplicableRatings.HasFlag(RatingCategoryFlags.Casual));
-                        break;
-                    case RatingOption.Planetwars:
-                        //q = q.Where(b => b.IsRatedMatch() && b.GetRatingCategory() == RatingCategory.Planetwars);
-                        q = q.Where(b => b.ApplicableRatings.HasFlag(RatingCategoryFlags.Planetwars));
-                        break;
-                    case RatingOption.None:
-                        //q = q.Where(b => !b.IsRatedMatch());
-                        q = q.Where(b => b.ApplicableRatings == 0);
-                        break;
-                }
+            var ratingCategories = (RatingCategoryFlags[])Enum.GetValues(typeof(RatingCategoryFlags));
+            model.RatingOptions = new List<SelectListItem>();
+            model.RatingOptions.Add(new SelectListItem { Text = "Any", Value = ratingCategories.Select(x => (int)x).Aggregate((x, y) => x | y).ToString() });
+            model.RatingOptions.Add(new SelectListItem { Text = "None", Value = "0" });
+            model.RatingOptions.AddRange(ratingCategories.Select(x => new SelectListItem { Text = x.ToString(), Value = ((int)x).ToString() }));
+
+            if (model.Rating == 0)
+            {   // must not have any rating flags
+                q.Where(b => b.ApplicableRatings == 0);
+            }
+            else
+            {   // must have at least model.Rating, but can have other rating flags too
+                q.Where(b => ((int)b.ApplicableRatings & (int)model.Rating) > 0);
             }
 
             q = q.OrderByDescending(b => b.StartTime);
@@ -208,12 +195,13 @@ namespace ZeroKWeb.Controllers
         ///     Returns a page with the <see cref="SpringBattle" /> infolog
         /// </summary>
         [Auth(Role = AdminLevel.Moderator)]
-        public ActionResult Logs(int id) {
+        public ActionResult Logs(int id)
+        {
             using (var db = new ZkDataContext())
             {
                 var bat = db.SpringBattles.Single(x => x.SpringBattleID == id);
                 return Content(System.IO.File.ReadAllText(string.Format(GlobalConst.InfologPathFormat, bat.EngineGameID)), "text/plain");
-                    //,string.Format("infolog_{0}.txt", bat.SpringBattleID)
+                //,string.Format("infolog_{0}.txt", bat.SpringBattleID)
             }
         }
 

@@ -30,7 +30,7 @@
                 Rank: @Html.EnumDropDownListFor(x => x.Rank)
                 Victory: @Html.EnumDropDownListFor(x => x.Victory)
                 MM: @Html.EnumDropDownListFor(x => x.Matchmaker)
-                Rating: @Html.EnumDropDownListFor(x => x.Rating)
+                Rating: @Html.DropDownListFor(model => model.Rating, Model.RatingOptions)
                 <input name="sa" value="Search" alt="Search" type="image" src="/img/search_img.png" style="border: none; vertical-align: middle;" />
             </td>
         </tr>
